@@ -123,11 +123,12 @@ class MVPGraph():
       n.attr['label']=n
       #n.attr['labelfontsize']='60'
       n.attr['width']='1.5'
-      n.attr['heigth']='1.5'
+      n.attr['height']='1.5'
     
     
     G.edge_attr['color']='red'
     #G.edge_attr['len']='1'
+    G.edge_attr['overlap']='false'
     
     
     G.layout(prog="neato")
