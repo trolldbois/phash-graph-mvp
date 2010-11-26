@@ -98,7 +98,7 @@ class MVPGraph():
   #      if (len(self.graph.neighbors(dom))>20):
   #        # ignore , yen a trop
   #          self.graph.add_edge(dom,spamurl.url.hostname,{'weight':1})
-  def makeGraph(self,filename,graph=None,w=12,h=8):
+  def makeGraph(self,filename,graph=None):
     if (graph is None):
       graph=self.graph
     outdot=filename+'.dot'
@@ -111,16 +111,19 @@ class MVPGraph():
     
     G.graph_attr['label']='Graph %s'%(self.tree.db)
     #G.graph_attr['labelfontsize']='400'
-    G.graph_attr['overlap']='no'
+    G.graph_attr['overlap']='false'
+    #G.graph_attr['landscape']='true'
 
     G.node_attr['shape']='none'
     G.node_attr['imagescale']='true'
     G.node_attr['fixedsize']='true'
+    G.node_attr['labelloc']='b'
     for n in G.nodes():
       n.attr['image']=os.path.join(self.__dirname,n)
       n.attr['label']=n
       #n.attr['labelfontsize']='60'
-      #n.attr['width']='3'
+      n.attr['width']='1.5'
+      n.attr['heigth']='1.5'
     
     
     G.edge_attr['color']='red'
@@ -162,7 +165,7 @@ def main(argv):
   '''
   '''
   #locale.setlocale(locale.LC_ALL,'fr_FR')
-  logging.basicConfig(level=logging.DEBUG)
+  logging.basicConfig(level=logging.INFO)
 
 
   if len(argv) == 1 :
@@ -176,7 +179,7 @@ def main(argv):
     
   if len(argv) <3 :
     logging.error('usage1: graphmvp.py <dirname> <dbname> <outputgraph> # build graph from database') 
-    logging.error('usage2: graphmvp.py <dirname>                        # build database and graph') 
+    logging.error('usage2: graphmvp.py <dirname>                        # build database and graph (beta)') 
     return 
   
   dirname=argv[0]

@@ -73,6 +73,7 @@ class MVPTree():
     if not callback is None:
       self.callback=callback
     self.initMVPFile()
+    self.log.debug("Setup: radius:%f threshold:%f knearest:%d (hashType:%d)"%(self.radius,self.threshold,self.knearest,self.hashType))
   '''
   Init the MVPFile struct
   '''
@@ -143,12 +144,18 @@ class MVPTree():
     #end for files
     self.log.debug("add %d files to file %s"%(count,self.db))
     nbsaved=0
+    if (not self.__DbExists()):
     # add all files to MVPTree
-    ret = pHash.ph_add_mvptree(self.mvpfile, hashlist.cast(), count)
-    if (type(ret) is int):
-      self.log.error("error on ph_add_mvptree")
-      raise PHashException("error on ph_add_mvptree")
-    (retcode,nbsaved)=ret
+      ret = pHash.ph_save_mvptree(self.mvpfile, hashlist.cast(), count)
+      (retcode,nbsaved)=ret,count
+    else:
+      # add all files to MVPTree
+      ret = pHash.ph_add_mvptree(self.mvpfile, hashlist.cast(), count)
+      if (type(ret) is int):
+        self.log.error("error on ph_add_mvptree")
+        raise PHashException("error on ph_add_mvptree")
+      (retcode,nbsaved)=ret
+    # common error handling
     if (retcode != pHash.PH_SUCCESS and retcode != pHash.PH_ERRCAP):
       self.log.warning("could not complete query, %d"%(retcode))
       raise PHashException("could not complete query, %d"%(retcode))
@@ -278,7 +285,13 @@ class MVPTree():
     tmpdp.hash=pHash.copy_ulong64Ptr(hashp)
     tmpdp.hash_length = 1
     return tmpdp
-
+  '''
+    Returns true if the two database files exists   
+  '''
+  def __DbExists(self):
+    f1=self.mvpfile.filename+'.mvp'
+    f2=self.mvpfile.filename+'1.mvp'
+    return (os.access(f1,os.F_OK) and os.access(f2,os.F_OK) )
 
 class Hasher:
   log=None
