@@ -1,0 +1,35 @@
+phash-graph-mvp is a small python script which use pHash ( http://www.phash.org/ )
+to build a graphical representation of perceptual relation between images.
+
+Say you have a directory full of similar (cropped, blur, noise, filters) images.
+You can create a graphical representation of relation between pictures.
+
+Example:
+
+ $ python graphmvp.py 
+ERROR:root:usage1: graphmvp.py <dirname> <dbname> <outputgraph> # build graph from database
+ERROR:root:usage2: graphmvp.py <dirname>                        # build database and graph (beta)
+
+Build a database and create a graph
+ $ python graphmvp.py examples/datasets/
+
+Outputs :
+datasets.db.mvp   -> pHash MVP Database.
+datasets.db1.mvp  -> pHash MVP Database.
+datasets.png.dot  -> pygraphiz graph representation file
+datasets.png      -> PNG output
+
+
+
+Create a graph from a database and a directory.
+ $ python graphmvp.py examples/datasets/ datasets.db datasets.png
+
+Inputs:
+datasets.db.mvp   -> pHash MVP Database.
+datasets.db1.mvp  -> pHash MVP Database.
+examples/datasets -> the source folder with the image used in building the MVP database 
+
+Outputs :
+datasets.png.dot  -> pygraphiz graph representation file
+datasets.png      -> PNG output
+

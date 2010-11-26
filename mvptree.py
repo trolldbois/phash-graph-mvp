@@ -79,9 +79,11 @@ class MVPTree():
   def initMVPFile(self):
     self.mvpfile=None
     self.mvpfile=pHash.MVPFile()
+    pHash.ph_mvp_init(self.mvpfile)
     self.mvpfile.filename = self.db
     pHash.my_set_callback(self.mvpfile,self.callback)  
     self.mvpfile.hash_type = self.hashType
+    # check if file exists or create it ??
     return
   '''
   inits hash callbacks and other content dependant fields
@@ -108,7 +110,7 @@ class MVPTree():
   '''
     add files from directory
   '''
-  def addFileFrom(self,dirname):
+  def addFilesFrom(self,dirname):
     # read filenames
     files1=[]
     for root, dirs, files in os.walk(dirname):
@@ -146,8 +148,11 @@ class MVPTree():
     if (type(ret) is int):
       self.log.error("error on ph_add_mvptree")
       raise PHashException("error on ph_add_mvptree")
-    (res,nbsaved)=ret
-    self.log.debug("number saved %d out of %d, ret code %d"%( nbsaved,count,res))
+    (retcode,nbsaved)=ret
+    if (retcode != pHash.PH_SUCCESS and retcode != pHash.PH_ERRCAP):
+      self.log.warning("could not complete query, %d"%(retcode))
+      raise PHashException("could not complete query, %d"%(retcode))
+    self.log.debug("number saved %d out of %d, ret code %d"%( nbsaved,count,retcode))
     return
  
   ############################ QUERY FUNCTIONS #################################  
@@ -233,7 +238,8 @@ class MVPTree():
       raise PHashException("could not complete query, %d"%(retcode))
     retcode,nbfound = ret
     if (retcode != pHash.PH_SUCCESS and retcode != pHash.PH_ERRCAP):
-      self.log.error("could not complete query, %d"%(retcode))
+      self.log.warning("could not complete query, %d"%(retcode))
+      #self.log.debug("nbfound : %d"%(nbfound))
       raise PHashException("could not complete query, %d"%(retcode))
 
     # results treatment

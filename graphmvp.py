@@ -27,7 +27,10 @@
 # dot graph edito http://tintfu.sourceforge.net/
 
 #
-
+# Data set from SURF / http://www.robots.ox.ac.uk/~vgg/research/affine/index.html
+#
+#
+#
 import pHash
 from mvptree import MVPTree
 
@@ -55,8 +58,6 @@ class MVPGraph():
   '''
   def __init__(self,dbFilename):
     self.log=logging.getLogger(self.__class__.__name__)
-    if (not os.access(dbFilename+'.mvp',os.F_OK)):
-      raise IOError("file not found")
     self.tree=MVPTree(dbFilename)
     self.graph=nx.Graph()
     pass
@@ -135,14 +136,47 @@ class MVPGraph():
 
 
 
+def buildAndQuery(dirname):
+  # testing dirname
+  if (not os.path.isdir(dirname)):
+    logging.error('%s is not a directory'%(dirname))
+    return
+  p=os.getcwd()
+  os.chdir(p)
+  # filenames
+  fname=os.path.split(os.path.normpath(dirname))[1]
+  db=fname+'.db'
+  outputfile=fname+'.png'
+  logging.debug('databaseFilename: %s[.mvp] '%(db))  
+  logging.debug('output img  name: %s '%(outputfile))  
+  #
+  g= MVPGraph(db)
+  logging.info('making database %s[.mvp] from directory %s'%(db,dirname))
+  g.tree.addFilesFrom(dirname)
+  logging.info('building graph')
+  g.build(dirname)
+  logging.info('output graph to %s'%(outputfile))
+  g.makeGraph(outputfile)
+
 def main(argv):
   '''
   '''
   #locale.setlocale(locale.LC_ALL,'fr_FR')
-  logging.basicConfig(level=logging.INFO)
+  logging.basicConfig(level=logging.DEBUG)
 
+
+  if len(argv) == 1 :
+    dirname=argv[0]
+    logging.warning('You entered in the build-MVP-and-query-tree-from-scratch mode on dir %s'%(dirname)) 
+    logging.warning(' *** If you want to continue, press ENTER, else Control-C \n') 
+    logging.warning('other usage: graphmvp.py <dirname> <dbname> <outputgraph>') 
+    sys.stdin.readline()
+    buildAndQuery(dirname)
+    return
+    
   if len(argv) <3 :
-    logging.error('usage: graphmvp.py <dirname> <dbname> <outputgraph>') 
+    logging.error('usage1: graphmvp.py <dirname> <dbname> <outputgraph> # build graph from database') 
+    logging.error('usage2: graphmvp.py <dirname>                        # build database and graph') 
     return 
   
   dirname=argv[0]
