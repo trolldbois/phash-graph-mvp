@@ -23,6 +23,9 @@
 #
 #
 # http://www.graphviz.org/doc/info/
+
+# dot graph edito http://tintfu.sourceforge.net/
+
 #
 
 import pHash
@@ -35,10 +38,12 @@ import time, locale
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-
+import pygraphviz as pgv
 
 '''
 find relation between files in a MVP Database
+
+We use networkx to be able to play with graph algorithms
 '''
 class MVPGraph():
   log=None
@@ -59,6 +64,7 @@ class MVPGraph():
   builf graph from MVP Db 
   '''
   def build(self,dirname):
+    self.__dirname=dirname
     myfiles=None
     for root,dirs,files in os.walk(dirname):
       if (root==dirname):
@@ -67,20 +73,26 @@ class MVPGraph():
           self.log.debug(" Adding node %s"%(f))
           self.graph.add_node(f)
         myfiles=[os.path.join(root,fname) for fname in files]
+    self.log.info("Found %d files in %s"%(len(myfiles),dirname) )
     # query edges  
+    self.log.info("Querying %d files in MVPTree %s"%(len(myfiles),self.tree.db) )
     queryResults=self.tree.queryFiles(myfiles)
     # add edges
     for srcfile,matches in queryResults:
       for match,dist in matches:
-        self.log.debug("match : %s , %f"%(match.id,dist))
+        #self.log.debug("match : %s , %f"%(match.id,dist))
         tget=os.path.basename(match.id)
-        self.log.debug(" tget node : %s"%(tget))
+        #self.log.debug(" tget node : %s"%(tget))
         if tget not in self.graph:
           self.log.warning(" Adding tget node ... weird ... : %s "%(match.id))
           self.graph.add_node(tget)
         # add edge
-        self.graph.add_edge(srcfile,tget,{'weight':dist})
+        sfile=os.path.basename(srcfile)
+        if ( sfile != tget ):
+          self.log.debug("ADDING EDGE : %s -- %s"%(sfile,tget))
+          self.graph.add_edge(sfile,tget,{'weight':dist})
     # graph is done
+    self.log.info("Build %d nodes and %d edges"%(len(self.graph.nodes()),len(self.graph.edges())))
     return
   #      if (len(self.graph.neighbors(dom))>20):
   #        # ignore , yen a trop
@@ -88,36 +100,47 @@ class MVPGraph():
   def makeGraph(self,filename,graph=None,w=12,h=8):
     if (graph is None):
       graph=self.graph
+    outdot=filename+'.dot'
+    self.log.info('Creating graph Image: %s , dotfile: %s '%(filename,outdot))
     # WTF... INCHES !
     self.log.debug('making graph')
-    plt.figure(figsize=(w,h))
-    self.log.debug('..layout')
-    #pos=nx.graphviz_layout(self.graph,prog="twopi",root=0)
-    pos=nx.graphviz_layout(graph,prog="neato",root=0)
-    nodesSize=[]
-    labels={}
-    self.log.debug('..nodes')
-    # on différencie la taille des node sur leur representation...
-    for n in graph.nodes():
-      nodesSize.append(50)
-      self.log.debug("Label: %s --> %s"%(n,os.path.basename(n)))
-      labels[n]=os.path.basename(n)
-    #nx.draw_graphviz
-    self.log.debug('..draw')
-    nx.draw(graph,pos,node_size=nodesSize,labels=labels,alpha=0.7,\
-                  font_weight='bold',font_size='12',node_color='y')
-    self.log.debug('..write_dot')
-    nx.write_dot(graph,''.join([filename,'.dot']))
-    self.log.debug('..savefig')
-    # extract plt
-    plt.savefig(filename)
-    return graph
+    G=nx.to_agraph(graph)
+    
+    self.log.debug('%d nodes'%(len( G.nodes()) ) )
+    
+    G.graph_attr['label']='Graph %s'%(self.tree.db)
+    #G.graph_attr['labelfontsize']='400'
+    G.graph_attr['overlap']='no'
+
+    G.node_attr['shape']='none'
+    G.node_attr['imagescale']='true'
+    G.node_attr['fixedsize']='true'
+    for n in G.nodes():
+      n.attr['image']=os.path.join(self.__dirname,n)
+      n.attr['label']=n
+      #n.attr['labelfontsize']='60'
+      #n.attr['width']='3'
+    
+    
+    G.edge_attr['color']='red'
+    #G.edge_attr['len']='1'
+    
+    
+    G.layout(prog="neato")
+    self.log.debug('drawing %s '%(filename))
+    G.draw(filename)
+    self.log.debug('writing  %s '%(outdot))
+    G.write(outdot)
+    return G
 
 
 
+def main(argv):
+  '''
+  '''
+  #locale.setlocale(locale.LC_ALL,'fr_FR')
+  logging.basicConfig(level=logging.INFO)
 
-def testGraph(argv):
-  
   if len(argv) <3 :
     logging.error('usage: graphmvp.py <dirname> <dbname> <outputgraph>') 
     return 
@@ -129,15 +152,6 @@ def testGraph(argv):
   g= MVPGraph(db)
   g.build(dirname)
   g.makeGraph(outputfile)
-
-
-
-def main(argv):
-  '''
-  '''
-  #locale.setlocale(locale.LC_ALL,'fr_FR')
-  logging.basicConfig(level=logging.DEBUG)
-  testGraph(argv)
 
 
 
