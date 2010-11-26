@@ -165,14 +165,12 @@ class MVPTree():
         break
     files1.sort()
     #
-    results=[]
-    for f in files1:
-      # compute image Hash
-      hashp,hashLen=self.__hasher.makeHash(f)
-      # put it in datapoint
-      # query datapoint
-      ret=self.queryHash(hashp,ident=f,hashLen=hashLen)
-      results.append((f,ret))
+    return self.queryFiles(files1)
+  '''
+  query a list of files
+  '''
+  def queryFiles(self,files):
+    results=[(f,self.queryFile(f)) for f in files]
     # return result list
     return results
   '''
