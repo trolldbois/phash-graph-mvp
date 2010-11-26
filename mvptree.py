@@ -26,6 +26,10 @@ import pHash
 import locale,logging,os,sys,time
 from os.path import join
 
+IMAGE=1
+VIDEO=2
+AUDIO=4
+
 
 def distancefunc(pa,pb):
   # pa.hash is a void * pointer.
@@ -34,6 +38,19 @@ def distancefunc(pa,pb):
   return d
 
 
+class PHashException(BaseException):
+  pass
+
+'''
+ Object Accessor to MVP functions and structs
+
+ mvp=MVPTree(Dbname) 
+ mvp.addFile(filename)
+ mvp.addFilesFrom(dirname)
+ mvp.query(filename)
+ 
+  
+'''
 class MVPTree():
   log=None
   db=None
@@ -43,14 +60,18 @@ class MVPTree():
   hashType=None
   callback=None
   mvpfile=None
-  def __init__(self,dbname,radius=30.0,threshold=15.0,knearest=20,hashType=pHash.UINT64ARRAY,callback=distancefunc):
+  #
+  __hasher=None
+  def __init__(self,dbname,contentType=IMAGE,radius=30.0,threshold=15.0,knearest=20,hashType=pHash.UINT64ARRAY,callback=None):
     self.log=logging.getLogger(self.__class__.__name__)
     self.db=dbname
+    self.initContentType(contentType)
     self.radius=radius
     self.threshold=threshold
     self.knearest=knearest
     self.hashType=hashType
-    self.callback=callback
+    if not callback is None:
+      self.callback=callback
     self.initMVPFile()
   '''
   Init the MVPFile struct
@@ -61,19 +82,111 @@ class MVPTree():
     self.mvpfile.filename = self.db
     pHash.my_set_callback(self.mvpfile,self.callback)  
     self.mvpfile.hash_type = self.hashType
-
+    return
+  '''
+  inits hash callbacks and other content dependant fields
+  '''
+  def initContentType(self,content):
+    if content == IMAGE:
+      self.__hasher=ImageHasher()
+      self.callback=distancefunc
+    elif content == VIDEO:
+      self.__hasher=VideoHasher()
+      self.callback=distancefunc
+    elif content == AUDIO:
+      self.__hasher=AudioHasher()
+      self.callback=distancefunc
+    else:
+      raise TypeError()
+  ############################ ADD   FUNCTIONS #################################  
+  '''
+    add a single file
+  '''
+  def addFile(self,filename):
+    self.addFiles([filename])
+    return
+  '''
+    add files from directory
+  '''
+  def addFileFrom(self,dirname):
+    # read filenames
+    files1=[]
+    for root, dirs, files in os.walk(dirname):
+      if (root == dirname):
+        files1=[os.path.join(root,f) for f in files]
+        break
+    files1.sort()
+    #
+    self.addFiles(files1)
+    return
+  '''
+  Add files in args to MVP Databse
+  '''
+  def addFiles(self,files):
+    nbfiles=len(files)
+    # make sources struct
+    hashlist=pHash.DPptrArray(nbfiles)
+    if ( hashlist is None):
+      self.log.error("mem alloc error")
+      raise MemoryError("mem alloc error")
+    # make a datapoint for each file    
+    count=0
+    tmphash=0x00000000
+    for f in files:
+      tmpdp=self.makeDatapoint(f)
+      tmpdp.thisown=0
+      hashlist[count]=tmpdp
+      self.log.debug("file[%d] = %s"%( count, f ) )      
+      count+=1
+    #end for files
+    self.log.debug("add %d files to file %s"%(count,self.db))
+    nbsaved=0
+    # add all files to MVPTree
+    ret = pHash.ph_add_mvptree(self.mvpfile, hashlist.cast(), count)
+    if (type(ret) is int):
+      self.log.error("error on ph_add_mvptree")
+      raise PHashException("error on ph_add_mvptree")
+    (res,nbsaved)=ret
+    self.log.debug("number saved %d out of %d, ret code %d"%( nbsaved,count,res))
+    return
+ 
+  ############################ QUERY FUNCTIONS #################################  
+  '''
+  Query a MVP Tree for files from a directory .
+  return a list :
+   [ (srcfilename, [ (matcshFilename,score),...] ) , ... ]
+  '''
+  def queryFilesFrom(self,dirname,ident=None):
+    # read filenames
+    files1=[]
+    for root, dirs, files in os.walk(dirname):
+      if (root == dirname):
+        files1=[os.path.join(root,f) for f in files]
+        break
+    files1.sort()
+    #
+    results=[]
+    for f in files1:
+      # compute image Hash
+      hashp,hashLen=self.__hasher.makeHash(f)
+      # put it in datapoint
+      # query datapoint
+      ret=self.queryHash(hashp,ident=f,hashLen=hashLen)
+      results.append((f,ret))
+    # return result list
+    return results
   '''
   Query for an image file in a MVP Tree.
    @use ph_dct_imagehash
   '''
-  def queryImage(self,filename,ident=None):
+  def queryFile(self,filename,ident=None):
     if ( not os.access(filename,os.F_OK)):
       raise IOError('file not found: %s'%(filename))
     # compute image Hash
-    hashp=self.makeImageHash(filename)
+    hashp,hashLen=self.__hasher.makeHash(filename)
     # put it in datapoint
     # query datapoint
-    ret=self.queryHash(hashp,ident=filename,hashLen=1)
+    ret=self.queryHash(hashp,ident=filename,hashLen=hashLen)
     # return result list
     return ret
   '''
@@ -137,17 +250,118 @@ class MVPTree():
       pass
     res=[ (results[j],distancefunc(datapoint, results[j]) ) for j in range (0,nbfound)]
     return res
-  ''' 
-  Calls ph_dct_imagehash. hash_lenght is 1
+  ############################ UTILS FUNCTIONS #################################  
+  def makeDatapoint(self,filename):
+    # make datapoint
+    tmpdp=pHash.ph_malloc_datapoint(self.mvpfile.hash_type)
+    if (tmpdp is None):
+      self.log.error("mem alloc error")
+      raise MemoryError("mem alloc error")
+    # memory ownage
+    tmpdp.thisown=0
+    # call hasher    
+    hashp=0
+    hashLen=0
+    try:
+      hashp,hashLen=self.__hasher.makeHash(filename)
+    except PHashException,e:
+      self.log.error("unable to get hash: %s"%(filename))
+      pHash.ph_free_datapoint(tmpdp)
+      raise PHashException("unable to get hash: %s"%(filename))
+    # fill DP
+    tmpdp.id = filename
+    #@TODO that function call is type dependent... voidPtr ?
+    tmpdp.hash=pHash.copy_ulong64Ptr(hashp)
+    tmpdp.hash_length = 1
+    return tmpdp
+
+
+class Hasher:
+  log=None
+  def __init__(self):
+    self.log=logging.getLogger(self.__class__.__name__)
   '''
-  def makeImageHash(self,filename):
+    take a filename in input
+    return ( hashvalue, haslen )
+  '''
+  def makeHash(self,filename):
+    raise NotImplementedError()
+
+
+class ImageHasher(Hasher):
+  ''' 
+  Calls ph_dct_imagehash. hash_lenght is 1  
+  '''
+  def makeHash(self,filename):
     ret=pHash.ph_dct_imagehash(filename) 
     if (type(ret) is int):
       self.log.error("unable to get hash, retcode %d"%(ret))
       raise PHashException("unable to get hash, retcode %d"%(ret))
     ret2,hashp=ret
-    return hashp
+    return (hashp,1)
     
+
+
+
+
+
+def test_addFile1(mvp,dir_name):
+  files=None
+  for root, dirs, filest in os.walk(dir_name):
+    if (root == dir_name):
+      files=[os.path.join(root,f) for f in filest]
+      break
+  files.sort()
+  filename=files[0]
+  print "add for %s"%( filename)
+  # query for image filename
+  mvp.addFile(filename)  
+  test_queryFile1(mvp,filename)
+
+def test_queryFile1(mvp,filename):
+  print "query for %s"%( filename)
+  # query for image filename
+  res=mvp.queryFile(filename)  
+  print " %d files found"%( len(res))
+  for match,dist in res:
+    print " %s distance = %f"%( match.id, dist)
+  return 0
+
+
+
+def test_queryFiles2(mvp,dir_name):
+  res=mvp.queryFilesFrom(dir_name)  
+  for f,matches in res:
+    print "query for %s"%( f)
+    # query for image filename
+    print " %d files found"%( len(matches))
+    for match,dist in matches:
+      print " %s distance = %f"%( match.id, dist)
+
+  return 0
+
+
+def test_queryFiles1(mvp,dir_name):
+  files=None
+  for root, dirs, filest in os.walk(dir_name):
+    if (root == dir_name):
+      files=[os.path.join(root,f) for f in filest]
+      break
+  files.sort()
+  print "nb query files = %d"%( nbfiles)
+
+  for f in files:
+    print "query for %s"%( f)
+    # query for image filename
+    res=mvp.queryFile(f)  
+    print " %d files found"%( len(res))
+    for match,dist in res:
+      print " %s distance = %f"%( match.id, dist)
+
+  return 0
+
+
+
     
 def main(argv):
   '''
@@ -167,25 +381,11 @@ def main(argv):
   print "using db %s"%( filename)
   print "using dir %s for query files"%( dir_name)
 
-  mvp = MVPTree(filename)
-  
-  nbfiles=0
-  files=None
-  for root, dirs, filest in os.walk(dir_name):
-    nbfiles=len(filest)
-    files=[os.path.join(root,f) for f in filest]
-  files.sort()
-  print "nb query files = %d"%( nbfiles)
+  mvp = MVPTree(filename) # IMAGE
 
-  for f in files:
-    print "query for %s"%( f)
-    # query for image filename
-    res=mvp.queryImage(f)  
-    print " %d files found"%( len(res))
-    for match,dist in res:
-      print " %s distance = %f"%( match.id, dist)
-
-  return 0
+  #test_queryFiles1(mvp,dir_name)
+  #test_queryFiles2(mvp,dir_name)
+  test_addFile1(mvp,dir_name)
 
 
 if __name__ == '__main__':
